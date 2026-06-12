@@ -6,7 +6,8 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Locomotion environments for legged robots."""
+"""Symmetry functions for the velocity tasks.
 
-from .velocity import *  # noqa
-from .position import *  # noqa
+These functions are used to augment the observations and actions of the environment.
+They are specific to the velocity task and the choice of the robot.
+"""

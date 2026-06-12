@@ -6,7 +6,7 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 
-"""Locomotion environments for legged robots."""
+"""Configurations for velocity-based locomotion environments."""
 
-from .velocity import *  # noqa
-from .position import *  # noqa
+# We leave this file empty since we don't want to expose any configs in this package directly.
+# We still need this file to import the "config" module in the parent package.
