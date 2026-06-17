@@ -145,16 +145,20 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.keyboard:
         env_cfg.scene.num_envs = 1
         env_cfg.terminations.time_out = None
-        env_cfg.commands.base_velocity.debug_vis = False
-        config = Se2KeyboardCfg(
-            v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
-            v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
-            omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
-        )
-        controller = Se2Keyboard(config)
-        env_cfg.observations.policy.velocity_commands = ObsTerm(
-            func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device),
-        )
+        if hasattr(env_cfg.commands, "base_velocity"):
+            # Velocity task: the keyboard drives the x/y/yaw velocity command directly.
+            env_cfg.commands.base_velocity.debug_vis = False
+            config = Se2KeyboardCfg(
+                v_x_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_x[1],
+                v_y_sensitivity=env_cfg.commands.base_velocity.ranges.lin_vel_y[1],
+                omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
+            )
+            controller = Se2Keyboard(config)
+            env_cfg.observations.policy.velocity_commands = ObsTerm(
+                func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device),
+            )
+        else:
+            raise ValueError("--keyboard requires the task to define a 'base_velocity' command.")
 
     # specify directory for logging experiments
     log_root_path = os.path.join("logs", "rsl_rl", agent_cfg.experiment_name)

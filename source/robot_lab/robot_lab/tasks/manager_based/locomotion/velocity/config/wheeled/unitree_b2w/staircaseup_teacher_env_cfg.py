@@ -27,8 +27,8 @@ STAIRCASEUP_TEACHER_CFG = TerrainGeneratorCfg(
         # solid-mesh inverted pyramid: sharp-edged steps, robot climbs out
         "mesh_stairs_inv": terrain_gen.MeshInvertedPyramidStairsTerrainCfg(
             proportion=0.5,
-            step_height_range=(0.04, 0.30),
-            step_width=0.3,
+            step_height_range=(0.06, 0.20),
+            step_width=0.275,
             platform_width=3.0,
             border_width=1.0,
             holes=False,
@@ -36,8 +36,8 @@ STAIRCASEUP_TEACHER_CFG = TerrainGeneratorCfg(
         # heightfield inverted pyramid: continuous sampled surface, same climbing task
         "hf_stairs_inv": terrain_gen.HfInvertedPyramidStairsTerrainCfg(
             proportion=0.5,
-            step_height_range=(0.04, 0.30),
-            step_width=0.3,
+            step_height_range=(0.06, 0.20),
+            step_width=0.275,
             platform_width=2.0,
             border_width=0.25,
         ),
