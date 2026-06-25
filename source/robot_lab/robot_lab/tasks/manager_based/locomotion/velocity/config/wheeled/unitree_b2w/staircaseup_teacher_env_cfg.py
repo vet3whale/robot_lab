@@ -12,8 +12,9 @@ from .rough_env_cfg import UnitreeB2WRoughEnvCfg
 # always forced to climb UP out of a stepped pit.  Mesh and heightfield variants are
 # split 50/50 so the robot sees both solid-edge steps (mesh) and the smoother
 # continuous surface produced by the heightfield sampler.
-# Difficulty range is wider than v0 (4 cm - 30 cm vs 5 cm - 23 cm) so row 9 is
-# significantly harder than anything in the original rough curriculum.
+# Difficulty range (6 cm - 20 cm step height, 27.5 cm tread) is centred on the real
+# hanger staircase (rise 16.8 cm, tread 27.8 cm) so the real geometry lands near the
+# top of the curriculum with a small margin above for sim2real robustness.
 STAIRCASEUP_TEACHER_CFG = TerrainGeneratorCfg(
     size=(8.0, 8.0),
     border_width=20.0,
@@ -61,7 +62,7 @@ class UnitreeB2WStaircaseUpTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
             self.scene.terrain.terrain_generator.curriculum = True
 
         # uprightness reward was so high the robot just stood still; cut it so tracking drives climbing
-        self.rewards.upward.weight = 0.5  # was 3.0
+        self.rewards.upward.weight = 3  # was 3.0
 
         # start everyone on the easiest row so it learns to walk before the curriculum ramps up
         self.scene.terrain.max_init_terrain_level = 0

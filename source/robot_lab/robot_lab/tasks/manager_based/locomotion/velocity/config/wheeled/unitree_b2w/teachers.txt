@@ -1,0 +1,11 @@
+# Multi-expert distillation teacher list.
+# One expert per line, ordered; the line index is the expert id.
+# Format:  <task_id>  <absolute_expert_PPO_checkpoint>
+#   task_id  - the per-teacher task; its terrain is merged into the combined env, and it is
+#              the task whose expert PPO actor is loaded as that expert's teacher.
+#
+# Replace the checkpoint paths below with your actual trained-expert checkpoints.
+
+RobotLab-Isaac-Velocity-StaircaseUp-Teacher-Unitree-B2W-v0  /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_staircaseup_teacher/
+RobotLab-Isaac-Velocity-SlopeUp-Teacher-Unitree-B2W-v0      /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_slopeup_teacher/
+RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v1               /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_rough_v1/

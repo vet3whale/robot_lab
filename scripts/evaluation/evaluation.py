@@ -32,6 +32,18 @@ KNOWN_TERRAINS = {
     "slopeup_teacher": "SlopeUp",
     "staircaseup": "StaircaseUp",
     "staircaseup_teacher": "StaircaseUp",
+    "multiexpert": "MultiExpert",
+}
+
+DEFAULT_AGENT = "rsl_rl_cfg_entry_point"
+
+# Policies whose actor architecture is not the task's default PPO MLP must be loaded with a
+# matching agent entry point, otherwise the actor-only checkpoint load fails (e.g. an LSTM
+# distillation student cannot load into a PPO MLP actor). The target task must also register the
+# chosen entry point; the B2W teacher tasks (rough/slopeup/staircaseup) all register the
+# distillation-recurrent one.
+KNOWN_EXPERIMENT_AGENTS = {
+    "unitree_b2w_multiexpert": "rsl_rl_distillation_recurrent_cfg_entry_point",
 }
 
 KNOWN_EXPERIMENT_TASKS = {
@@ -47,6 +59,11 @@ KNOWN_EXPERIMENT_TASKS = {
         "StaircaseUp",
         "velocity",
         "RobotLab-Isaac-Velocity-StaircaseUp-Teacher-Unitree-B2W-v0",
+    ),
+    "unitree_b2w_multiexpert": (
+        "MultiExpert",
+        "velocity",
+        "RobotLab-Isaac-Velocity-MultiExpert-Teacher-Unitree-B2W-v0",
     ),
 }
 
@@ -68,6 +85,7 @@ class PolicySpec:
     label: str
     checkpoint: str
     terrain: TerrainSpec
+    agent: str
 
 
 def model_index(path: str) -> int:
@@ -132,6 +150,17 @@ def infer_terrain_from_experiment(experiment: str) -> TerrainSpec:
     )
 
 
+def terrain_spec_from_name(name: str) -> TerrainSpec:
+    """Resolve a user-supplied --terrain value (a KNOWN_TERRAINS key) into a TerrainSpec."""
+    key = name.strip().lower()
+    experiment = key if key.startswith("unitree_b2w_") else f"unitree_b2w_{key}"
+    try:
+        return infer_terrain_from_experiment(experiment)
+    except ValueError:
+        valid = ", ".join(sorted(KNOWN_TERRAINS))
+        raise ValueError(f"Unknown --terrain '{name}'. Valid terrains: {valid}")
+
+
 def unique_terrains_for_family(policies: list[PolicySpec], family: str) -> list[TerrainSpec]:
     terrains: list[TerrainSpec] = []
     seen = set()
@@ -144,8 +173,16 @@ def unique_terrains_for_family(policies: list[PolicySpec], family: str) -> list[
     return terrains
 
 
-def build_eval_runs(policies: list[PolicySpec]) -> list[tuple[PolicySpec, TerrainSpec]]:
+def build_eval_runs(
+    policies: list[PolicySpec], terrains: list[TerrainSpec] | None = None
+) -> list[tuple[PolicySpec, TerrainSpec]]:
     runs: list[tuple[PolicySpec, TerrainSpec]] = []
+    # Explicit --terrain overrides inference: every policy is evaluated on every requested terrain.
+    if terrains:
+        for policy in policies:
+            for terrain in terrains:
+                runs.append((policy, terrain))
+        return runs
     terrains_by_family = {
         family: unique_terrains_for_family(policies, family)
         for family in sorted({policy.terrain.family for policy in policies})
@@ -176,12 +213,26 @@ def resolve_policy(spec: str) -> PolicySpec:
     experiment = experiment_from_path(candidate)
     label = experiment.removeprefix("unitree_b2w_")
     terrain = infer_terrain_from_experiment(experiment)
-    return PolicySpec(input_path=spec, experiment=experiment, label=label, checkpoint=checkpoint, terrain=terrain)
+    agent = KNOWN_EXPERIMENT_AGENTS.get(experiment, DEFAULT_AGENT)
+    return PolicySpec(
+        input_path=spec, experiment=experiment, label=label, checkpoint=checkpoint, terrain=terrain, agent=agent
+    )
 
 
 def parse_args(argv: list[str]) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Evaluate policies on the terrains they were trained on.")
     parser.add_argument("--policies", nargs="+", required=True, help="Policy run dirs, experiment dirs, names, or .pt files.")
+    parser.add_argument(
+        "--terrain",
+        nargs="+",
+        default=None,
+        metavar="TERRAIN",
+        help=(
+            "Explicit terrain(s) to evaluate every policy on, e.g. --terrain flat rough staircaseup_teacher. "
+            f"Choices: {', '.join(sorted(KNOWN_TERRAINS))}. "
+            "If omitted, each policy is tested on the terrains inferred from its experiment name."
+        ),
+    )
     parser.add_argument("--out_csv", default="evaluation.csv", help="CSV output path.")
     parser.add_argument("--levels", type=int, default=9, help="Number of difficulty levels to test per terrain.")
     parser.add_argument("--robots_per_level", type=int, default=512, help="Robots spawned on each terrain level.")
@@ -228,7 +279,17 @@ def auto_duration_s(terrain_name: str, robots_per_level: int) -> float:
 def main(argv: list[str]) -> int:
     args = parse_args(argv)
     policies = [resolve_policy(p) for p in args.policies]
-    eval_runs = build_eval_runs(policies)
+    requested_terrains: list[TerrainSpec] | None = None
+    if args.terrain:
+        requested_terrains = []
+        seen_keys = set()
+        for name in args.terrain:
+            terrain = terrain_spec_from_name(name)
+            key = (terrain.family, terrain.name, terrain.task)
+            if key not in seen_keys:
+                requested_terrains.append(terrain)
+                seen_keys.add(key)
+    eval_runs = build_eval_runs(policies, requested_terrains)
     validate_robot_count(args.robots_per_level)
     out_csv = os.path.abspath(args.out_csv)
 
@@ -243,12 +304,14 @@ def main(argv: list[str]) -> int:
     print(f"[evaluation] worker: {EVAL_WORKER}")
     print(f"[evaluation] policies: {len(policies)}")
     for policy in policies:
-        print(f"  - {policy.label} [{policy.terrain.family}/{policy.terrain.name}]: {policy.checkpoint}")
+        agent_note = "" if policy.agent == DEFAULT_AGENT else f" (agent={policy.agent})"
+        print(f"  - {policy.label} [{policy.terrain.family}/{policy.terrain.name}]{agent_note}: {policy.checkpoint}")
+    source = "requested via --terrain" if requested_terrains else "inferred from policies"
     print(
-        "[evaluation] terrains inferred from policies: "
+        f"[evaluation] terrains {source}: "
         + ", ".join(f"{terrain.family}/{terrain.name}" for terrain in inferred_terrains)
     )
-    if len({policy.terrain.family for policy in policies}) > 1:
+    if not requested_terrains and len({policy.terrain.family for policy in policies}) > 1:
         print("[evaluation] mixed policy families detected; cross-evaluating only within matching families")
     print(f"[evaluation] levels per terrain: {args.levels}; robots per level: {args.robots_per_level}")
     if args.duration_s is None:
@@ -283,6 +346,8 @@ def main(argv: list[str]) -> int:
             str(args.robots_per_level),
             "--eval_duration_s",
             str(duration_s),
+            "--agent",
+            policy.agent,
         ]
         if args.headless:
             cmd.append("--headless")

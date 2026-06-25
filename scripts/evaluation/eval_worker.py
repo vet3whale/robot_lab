@@ -432,8 +432,17 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     # eval loads policies into tasks they may not have trained on, so the saved critic (whose
     # privileged-obs size can differ per task, e.g. 247 on rough vs 60 on flat) would fail to
-    # load - skip it; eval only runs the actor forward.
-    load_cfg = {"actor": True, "critic": False, "optimizer": False, "iteration": False}
+    # load - skip it; eval only runs the deployable network forward.
+    #
+    # The load_cfg keys are runner-specific: PPO checkpoints store actor/critic, while distillation
+    # checkpoints store student/teacher (no actor_state_dict). get_inference_policy returns the
+    # student, so for distillation we load only the student and skip the task-specific teacher -
+    # passing the PPO {"actor", "critic"} keys to Distillation.load is a silent no-op that would
+    # leave the student randomly initialized.
+    if agent_cfg.class_name == "DistillationRunner":
+        load_cfg = {"student": True, "teacher": False, "optimizer": False, "iteration": False}
+    else:
+        load_cfg = {"actor": True, "critic": False, "optimizer": False, "iteration": False}
     runner.load(resume_path, load_cfg=load_cfg)
 
     # obtain the trained policy for inference

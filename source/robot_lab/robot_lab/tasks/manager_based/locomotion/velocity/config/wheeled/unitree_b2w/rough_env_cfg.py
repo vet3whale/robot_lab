@@ -171,7 +171,9 @@ class UnitreeB2WRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.rewards.stand_still.params["asset_cfg"].joint_names = self.leg_joint_names
         self.rewards.joint_pos_penalty.weight = -1.0
         self.rewards.joint_pos_penalty.params["asset_cfg"].joint_names = self.leg_joint_names
-        self.rewards.wheel_vel_penalty.weight = 0
+        # penalize wheel spin at zero command so the robot holds position (legs alone don't stop it
+        # drifting on its wheels); matches the ddtrobot_tita wheeled-robot value
+        self.rewards.wheel_vel_penalty.weight = -0.03
         self.rewards.wheel_vel_penalty.params["sensor_cfg"].body_names = [self.foot_link_name]
         self.rewards.wheel_vel_penalty.params["asset_cfg"].joint_names = self.wheel_joint_names
         self.rewards.joint_mirror.weight = -0.05
@@ -231,6 +233,11 @@ class UnitreeB2WRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.curriculum.command_levels_ang_vel = None
 
         # ------------------------------Commands------------------------------
+        # give standstill real training signal so the robot learns to hold position at zero
+        # command (base default 0.02 is too sparse to fix wheel drift); pairs with wheel_vel_penalty
+        self.commands.base_velocity.rel_standing_envs = 0.15
+        # arrow markers load from the Omniverse S3 CDN; disable so headless training works offline
+        self.commands.base_velocity.debug_vis = False
         # self.commands.base_velocity.ranges.lin_vel_x = (-2.0, 2.0)
         # self.commands.base_velocity.ranges.lin_vel_y = (-2.0, 2.0)
         # self.commands.base_velocity.ranges.ang_vel_z = (-1.5, 1.5)

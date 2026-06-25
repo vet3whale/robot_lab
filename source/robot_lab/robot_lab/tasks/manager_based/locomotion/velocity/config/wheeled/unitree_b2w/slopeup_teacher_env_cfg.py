@@ -47,7 +47,7 @@ class UnitreeB2WSlopeUpTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
             self.scene.terrain.terrain_generator.curriculum = True
 
         # uprightness reward was so high the robot just stood still; cut it so tracking drives climbing
-        self.rewards.upward.weight = 0.5  # was 3.0
+        self.rewards.upward.weight = 3.0  # was 3.0
 
         # start everyone on the easiest row so it learns to walk before the curriculum ramps up
         self.scene.terrain.max_init_terrain_level = 0
