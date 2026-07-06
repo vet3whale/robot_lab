@@ -48,6 +48,26 @@ gym.register(
 )
 
 gym.register(
+    id="RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v2",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.rough_env_cfg_v2:UnitreeB2WRoughEnvCfgV2",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeB2WRoughV2PPORunnerCfg",
+    },
+)
+
+gym.register(
+    id="RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v3",
+    entry_point="isaaclab.envs:ManagerBasedRLEnv",
+    disable_env_checker=True,
+    kwargs={
+        "env_cfg_entry_point": f"{__name__}.rough_env_cfg_v3:UnitreeB2WRoughEnvCfgV3",
+        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeB2WRoughV3PPORunnerCfg",
+    },
+)
+
+gym.register(
     id="RobotLab-Isaac-Velocity-StaircaseUp-Teacher-Unitree-B2W-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
