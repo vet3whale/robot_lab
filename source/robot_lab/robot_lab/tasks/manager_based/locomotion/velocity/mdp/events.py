@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 from typing import TYPE_CHECKING, Literal
 
 import torch
@@ -15,6 +16,66 @@ from .utils import is_env_assigned_to_terrain
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
+
+
+def record_policy_obs(
+    env: ManagerBasedEnv,
+    env_ids: torch.Tensor | None,
+    env_idx: int = 0,
+    every_n_iterations: int = 10,
+    steps_per_iteration: int = 24,
+    group_name: str = "policy",
+    out_dir: str | None = None,
+):
+    """Record the raw observation vector of one env to an HDF5 file during training.
+
+    Intended as an interval event firing every step. During every
+    ``every_n_iterations``-th learning iteration (iteration index derived from
+    ``common_step_counter``), the observation buffer of env ``env_idx`` - exactly what
+    the policy received, post noise/clip/scale - is appended to ``obs_<ts>.h5`` in
+    ``out_dir`` together with the global step and iteration index. ``out_dir=None``
+    resolves to ``<run log dir>/obs_records`` (train.py sets ``env_cfg.log_dir``),
+    falling back to ``logs/obs_records``. Buffered writes are flushed once per recorded
+    iteration (``steps_per_iteration`` samples), so a crash loses at most the current
+    iteration - PhysX GPU crashes on this terrain do happen.
+    """
+    obs_buf = getattr(env, "obs_buf", None)
+    if obs_buf is None or group_name not in obs_buf:
+        return
+    iteration = max(env.common_step_counter - 1, 0) // steps_per_iteration
+    if iteration % every_n_iterations != 0:
+        return
+
+    state = getattr(env, "_obs_record_state", None)
+    if state is None:
+        import time
+
+        if out_dir is None:
+            out_dir = os.path.join(getattr(env.cfg, "log_dir", None) or "logs", "obs_records")
+        os.makedirs(out_dir, exist_ok=True)
+        path = os.path.join(out_dir, f"obs_{group_name}_{time.strftime('%Y-%m-%d_%H-%M-%S')}.h5")
+        state = {"path": path, "obs": [], "step": [], "iter": []}
+        env._obs_record_state = state
+
+    state["obs"].append(obs_buf[group_name][env_idx].detach().cpu().numpy())
+    state["step"].append(env.common_step_counter)
+    state["iter"].append(iteration)
+
+    if len(state["obs"]) >= steps_per_iteration:
+        import h5py
+        import numpy as np
+
+        with h5py.File(state["path"], "a") as f:
+            for key, dtype in (("obs", np.float32), ("step", np.int64), ("iter", np.int64)):
+                data = np.asarray(state[key], dtype=dtype)
+                if key not in f:
+                    f.create_dataset(
+                        key, data=data, maxshape=(None,) + data.shape[1:], chunks=True, compression="gzip"
+                    )
+                else:
+                    f[key].resize(f[key].shape[0] + data.shape[0], axis=0)
+                    f[key][-data.shape[0] :] = data
+                state[key].clear()
 
 
 def randomize_rigid_body_inertia(
