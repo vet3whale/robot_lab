@@ -147,15 +147,15 @@ class CNNRNNModel(CNNModel):
         self.rnn.detach_hidden_state(dones)
 
     def as_jit(self) -> nn.Module:
-        """Deploy export is a separate CNN+LSTM wrapper (docs Section 6.2); not implemented yet."""
+        """Deploy export is a separate CNN+LSTM wrapper; not implemented yet."""
         raise NotImplementedError(
-            "CNNRNNModel needs a dedicated CNN+LSTM export wrapper (see docs Section 6.2); "
+            "CNNRNNModel needs a dedicated CNN+LSTM export wrapper; "
             "the stock CNN/RNN exporters each handle only one modality."
         )
 
     def as_onnx(self, verbose: bool = False) -> nn.Module:
-        """Deploy export is a separate CNN+LSTM wrapper (docs Section 6.2); not implemented yet."""
+        """Deploy export is a separate CNN+LSTM wrapper; not implemented yet."""
         raise NotImplementedError(
-            "CNNRNNModel needs a dedicated CNN+LSTM ONNX wrapper (see docs Section 6.2); "
+            "CNNRNNModel needs a dedicated CNN+LSTM ONNX wrapper; "
             "the stock CNN/RNN exporters each handle only one modality."
         )

@@ -204,7 +204,7 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         student gains a deployable view: proprio (no height scan) + 2 depth maps. Each camera becomes
         its own 4D image group so rsl_rl's ``CNNModel`` routes it to a conv encoder, and the velocity
         commands are split into their own 1D group so they can bypass the LSTM and re-enter at the
-        head (Rudin et al. Fig. 3). See docs/EnableDepthMapsForStudentDistillation.md.
+        head (Rudin et al. Fig. 3).
         """
         base_link_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
 

@@ -17,7 +17,7 @@ _STUDENT = "robot_lab.tasks.manager_based.locomotion.velocity.mdp.distillation.c
 
 @configclass
 class RslRlCNNRNNModelCfg(RslRlRNNModelCfg):
-    """Config for the depth-aware CNN + LSTM student (docs Section 5).
+    """Config for the depth-aware CNN + LSTM student.
 
     Extends the recurrent (RNN) model config with the per-camera conv encoder (``cnn_cfg``), the
     per-image FC stack (``cnn_fc_dims``, last value = latent size), and the 1D groups that bypass the
