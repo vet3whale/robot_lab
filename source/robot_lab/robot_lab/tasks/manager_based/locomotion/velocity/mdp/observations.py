@@ -33,3 +33,27 @@ def phase(env: ManagerBasedRLEnv, cycle_time: float) -> torch.Tensor:
     phase = env.episode_length_buf[:, None] * env.step_dt / cycle_time
     phase_tensor = torch.cat([torch.sin(2 * torch.pi * phase), torch.cos(2 * torch.pi * phase)], dim=-1)
     return phase_tensor
+
+
+def depth_image(
+    env: ManagerBasedEnv,
+    sensor_cfg: SceneEntityCfg,
+    min_range: float = 0.15,
+    max_range: float = 2.0,
+) -> torch.Tensor:
+    """Preprocess a ray-cast depth camera into the student's channel-first depth map.
+
+    Follows Rudin et al., "Parkour in the Wild", Sec. 2.4: pixels closer than ``min_range`` are
+    treated as empty and read as *far* (``max_range``), then depth is clipped at ``max_range`` and
+    scaled to ``[0, 1]``. Invalid pixels always read far, never near. The sensor's
+    ``depth_clipping_behavior="max"`` already maps misses and out-of-range hits to ``max_distance``,
+    so no ``inf``/``nan`` reaches here.
+
+    The ``RayCasterCamera`` writes ``(B, H, W, 1)`` (channels last); we permute to ``(B, 1, H, W)``
+    so rsl_rl's ``CNNModel`` shape-sniff routes the group to a conv encoder.
+    """
+    sensor = env.scene.sensors[sensor_cfg.name]
+    img = sensor.data.output["distance_to_image_plane"].clone()  # (B, H, W, 1) metres
+    img[img < min_range] = max_range  # too-close pixels are empty -> far
+    img = img.clamp(max=max_range) / max_range  # -> [0, 1]
+    return img.permute(0, 3, 1, 2)  # (B, 1, H, W) channel-first for CNNModel

@@ -6,6 +6,4 @@
 #
 # Replace the checkpoint paths below with your actual trained-expert checkpoints.
 
-RobotLab-Isaac-Velocity-StaircaseUp-Teacher-Unitree-B2W-v0  /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_staircaseup_teacher/
-RobotLab-Isaac-Velocity-SlopeUp-Teacher-Unitree-B2W-v0      /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_slopeup_teacher/
-RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v1               /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_rough_v1/
+RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v1  /workspace/near-locomotion-quadruped/robot_lab/logs/rsl_rl/unitree_b2w_rough_v1/2026-07-07_06-00-00_height_scan_enabled
