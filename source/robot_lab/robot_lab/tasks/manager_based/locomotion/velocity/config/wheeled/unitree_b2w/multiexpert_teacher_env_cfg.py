@@ -238,13 +238,18 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         for name in list(group.__dict__.keys()):
             if isinstance(getattr(group, name), ObsTerm):
                 setattr(group, name, None)
-        group.enable_corruption = False
+        group.enable_corruption = False  # DR lives inside the term (stateful), not Isaac's noise layer
         group.depth = ObsTerm(
-            func=mdp.depth_image,
+            func=mdp.DepthImageDR,
             params={
                 "sensor_cfg": SceneEntityCfg(sensor_name),
                 "min_range": DEPTH_MIN_RANGE,
                 "max_range": DEPTH_MAX_RANGE,
+                # per-corruption switches (the clean-vs-randomized ablation); flip to False to disable
+                "enable_edge": True,
+                "enable_holes": True,
+                "enable_blind": True,
+                "enable_blur": True,
             },
         )
         return group
