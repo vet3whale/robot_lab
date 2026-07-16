@@ -154,9 +154,23 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
                 omega_z_sensitivity=env_cfg.commands.base_velocity.ranges.ang_vel_z[1],
             )
             controller = Se2Keyboard(config)
-            env_cfg.observations.policy.velocity_commands = ObsTerm(
-                func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32).unsqueeze(0).to(env.device),
-            )
+            # Patch every group that carries the term, not just `policy`. Distillation envs deep-copy
+            # `policy` into the student's own groups in __post_init__, which has already run, so those
+            # copies are distinct objects; patching `policy` alone leaves the student reading the
+            # command manager and the keyboard drives nothing.
+            keyboard_groups = []
+            for group_name in list(env_cfg.observations.__dict__):
+                group = getattr(env_cfg.observations, group_name)
+                if isinstance(getattr(group, "velocity_commands", None), ObsTerm):
+                    group.velocity_commands = ObsTerm(
+                        func=lambda env: torch.tensor(controller.advance(), dtype=torch.float32)
+                        .unsqueeze(0)
+                        .to(env.device),
+                    )
+                    keyboard_groups.append(group_name)
+            if not keyboard_groups:
+                raise ValueError("--keyboard found no observation group with a 'velocity_commands' term.")
+            print(f"[INFO]: Keyboard drives 'velocity_commands' in group(s): {', '.join(keyboard_groups)}")
         else:
             raise ValueError("--keyboard requires the task to define a 'base_velocity' command.")
 

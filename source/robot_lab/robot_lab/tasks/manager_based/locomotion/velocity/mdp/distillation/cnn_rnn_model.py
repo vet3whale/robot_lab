@@ -13,6 +13,8 @@ and the velocity commands bypass the LSTM entirely (they only appear at the head
 
 from __future__ import annotations
 
+import copy
+
 import torch
 import torch.nn as nn
 from tensordict import TensorDict
@@ -147,15 +149,127 @@ class CNNRNNModel(CNNModel):
         self.rnn.detach_hidden_state(dones)
 
     def as_jit(self) -> nn.Module:
-        """Deploy export is a separate CNN+LSTM wrapper; not implemented yet."""
-        raise NotImplementedError(
-            "CNNRNNModel needs a dedicated CNN+LSTM export wrapper; "
-            "the stock CNN/RNN exporters each handle only one modality."
-        )
+        """Return a version of the model compatible with Torch JIT export."""
+        if not isinstance(self.rnn.rnn, nn.LSTM):
+            raise NotImplementedError(f"Unsupported RNN type for export: {type(self.rnn.rnn)}")
+        return _TorchCNNRNNModel(self)
 
     def as_onnx(self, verbose: bool = False) -> nn.Module:
-        """Deploy export is a separate CNN+LSTM wrapper; not implemented yet."""
-        raise NotImplementedError(
-            "CNNRNNModel needs a dedicated CNN+LSTM ONNX wrapper; "
-            "the stock CNN/RNN exporters each handle only one modality."
+        """Return a version of the model compatible with ONNX export."""
+        if not isinstance(self.rnn.rnn, nn.LSTM):
+            raise NotImplementedError(f"Unsupported RNN type for export: {type(self.rnn.rnn)}")
+        return _OnnxCNNRNNModel(self, verbose)
+
+
+def _copy_encoders(model: CNNRNNModel) -> nn.ModuleList:
+    """Fuse each camera's conv encoder and FC stage into one module, ordered by ``obs_groups_2d``.
+
+    The fusion keeps the JIT forward loop to a single ``ModuleList`` iteration: TorchScript can
+    iterate a ``ModuleList`` but cannot index a second one with the loop variable. The ordering is
+    the positional contract with the deploy side, as in the stock ``_TorchCNNModel``.
+    """
+    return nn.ModuleList(
+        nn.Sequential(copy.deepcopy(model.cnns[group]), copy.deepcopy(model.cnn_fcs[group]))
+        for group in model.obs_groups_2d
+    )
+
+
+class _TorchCNNRNNModel(nn.Module):
+    """Exportable CNN+LSTM student for JIT. Hidden state lives in buffers; call ``reset()`` on episode start."""
+
+    def __init__(self, model: CNNRNNModel) -> None:
+        """Create a TorchScript-friendly copy of a CNNRNNModel."""
+        super().__init__()
+        self.obs_normalizer = copy.deepcopy(model.obs_normalizer)
+        self.encoders = _copy_encoders(model)
+        self.rnn = copy.deepcopy(model.rnn.rnn)  # Access underlying torch module to avoid wrapper logic during export
+        self.mlp = copy.deepcopy(model.mlp)
+        if model.distribution is not None:
+            self.deterministic_output = model.distribution.as_deterministic_output_module()
+        else:
+            self.deterministic_output = nn.Identity()
+        self.register_buffer("hidden_state", torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size))
+        self.register_buffer("cell_state", torch.zeros(self.rnn.num_layers, 1, self.rnn.hidden_size))
+
+    def forward(self, proprio: torch.Tensor, commands: torch.Tensor, obs_2d: list[torch.Tensor]) -> torch.Tensor:
+        """Run one inference step; ``obs_2d`` order must match ``obs_groups_2d``."""
+        proprio = self.obs_normalizer(proprio)
+        latent_list = []
+        for i, encoder in enumerate(self.encoders):
+            latent_list.append(encoder(obs_2d[i]))
+        z_img = torch.cat(latent_list, dim=-1)
+        x, (h, c) = self.rnn(
+            torch.cat([proprio, z_img], dim=-1).unsqueeze(0), (self.hidden_state, self.cell_state)
         )
+        self.hidden_state[:] = h  # type: ignore
+        self.cell_state[:] = c  # type: ignore
+        latent = torch.cat([x.squeeze(0), proprio, commands], dim=-1)
+        return self.deterministic_output(self.mlp(latent))
+
+    @torch.jit.export
+    def reset(self) -> None:
+        """Reset exported LSTM hidden and cell states to zeros."""
+        self.hidden_state[:] = 0.0  # type: ignore
+        self.cell_state[:] = 0.0  # type: ignore
+
+
+class _OnnxCNNRNNModel(nn.Module):
+    """Exportable CNN+LSTM student for ONNX. The caller owns the recurrent state and threads it through."""
+
+    is_recurrent: bool = True
+
+    def __init__(self, model: CNNRNNModel, verbose: bool) -> None:
+        """Create an ONNX-export wrapper around a CNNRNNModel."""
+        super().__init__()
+        self.verbose = verbose
+        self.obs_normalizer = copy.deepcopy(model.obs_normalizer)
+        self.encoders = _copy_encoders(model)
+        self.rnn = copy.deepcopy(model.rnn.rnn)  # Access underlying torch module to avoid wrapper logic during export
+        self.mlp = copy.deepcopy(model.mlp)
+        if model.distribution is not None:
+            self.deterministic_output = model.distribution.as_deterministic_output_module()
+        else:
+            self.deterministic_output = nn.Identity()
+
+        self.obs_groups_2d = model.obs_groups_2d
+        self.obs_dims_2d = model.obs_dims_2d
+        self.obs_channels_2d = model.obs_channels_2d
+        self.proprio_dim = model.proprio_dim
+        self.cmd_dim = model.cmd_dim
+        self.hidden_size = self.rnn.hidden_size
+        self.num_layers = self.rnn.num_layers
+
+    def forward(
+        self, proprio: torch.Tensor, commands: torch.Tensor, *rest: torch.Tensor
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Run deterministic inference for ONNX export; ``rest`` is ``(*depth_images, h_in, c_in)``."""
+        obs_2d = rest[: len(self.encoders)]
+        h_in, c_in = rest[len(self.encoders)], rest[len(self.encoders) + 1]
+
+        proprio = self.obs_normalizer(proprio)
+        z_img = torch.cat([encoder(obs_2d[i]) for i, encoder in enumerate(self.encoders)], dim=-1)
+        x, (h, c) = self.rnn(torch.cat([proprio, z_img], dim=-1).unsqueeze(0), (h_in, c_in))
+        latent = torch.cat([x.squeeze(0), proprio, commands], dim=-1)
+        out = self.deterministic_output(self.mlp(latent))
+        return out, h, c
+
+    def get_dummy_inputs(self) -> tuple[torch.Tensor, ...]:
+        """Return representative dummy inputs for ONNX tracing."""
+        proprio = torch.zeros(1, self.proprio_dim)
+        commands = torch.zeros(1, self.cmd_dim)
+        dummy_2d = [
+            torch.zeros(1, self.obs_channels_2d[i], *self.obs_dims_2d[i]) for i in range(len(self.obs_groups_2d))
+        ]
+        h_in = torch.zeros(self.num_layers, 1, self.hidden_size)
+        c_in = torch.zeros(self.num_layers, 1, self.hidden_size)
+        return (proprio, commands, *dummy_2d, h_in, c_in)
+
+    @property
+    def input_names(self) -> list[str]:
+        """Return ONNX input tensor names; the image names identify the cameras."""
+        return ["proprio", "commands", *self.obs_groups_2d, "h_in", "c_in"]
+
+    @property
+    def output_names(self) -> list[str]:
+        """Return ONNX output tensor names."""
+        return ["actions", "h_out", "c_out"]

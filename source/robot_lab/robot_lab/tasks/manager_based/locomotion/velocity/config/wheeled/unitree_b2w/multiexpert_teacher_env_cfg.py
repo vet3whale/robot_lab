@@ -23,7 +23,8 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import RayCasterCameraCfg
 from isaaclab.sensors.ray_caster.patterns import PinholeCameraPatternCfg
-from isaaclab.terrains import TerrainGeneratorCfg
+from isaaclab.terrains import FlatPatchSamplingCfg, TerrainGeneratorCfg
+from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 from isaaclab.utils import configclass
 from isaaclab.utils.math import quat_from_euler_xyz
 from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
@@ -253,3 +254,38 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
             },
         )
         return group
+
+@configclass
+class UnitreeB2WMultiExpertPlayRoughEnvCfg(UnitreeB2WMultiExpertTeacherEnvCfg):
+    """Play variant: evaluate the distilled student on the stock v0 rough terrain.
+
+    The merged teacher terrain is swapped back for ``ROUGH_TERRAINS_CFG`` (the terrain of
+    ``RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v0``). Expert routing only selects which teacher's
+    action is stored as the distillation target, so it never drives the robot at play time; every
+    column maps to expert 0 to keep the ``MultiTeacherDistillation`` constructor happy.
+    """
+
+    def __post_init__(self):
+        super().__post_init__()
+
+        gen = copy.deepcopy(ROUGH_TERRAINS_CFG)
+        gen.curriculum = True
+        self.scene.terrain.terrain_generator = gen
+        self.column_to_expert = [0] * gen.num_cols
+
+        # sample spawn patches anywhere on each sub-terrain instead of always resetting at the
+        # patch origin (the pyramid center); rough / stepped spots are allowed via max_height_diff
+        for sub_cfg in gen.sub_terrains.values():
+            sub_cfg.flat_patch_sampling = {
+                "init_pos": FlatPatchSamplingCfg(num_patches=16, patch_radius=[0.4, 0.6], max_height_diff=0.3)
+            }
+        velocity_range = self.events.randomize_reset_base.params["velocity_range"]
+        # self.events.randomize_reset_base.func = reset_root_state_random_tile
+        self.events.randomize_reset_base.params = {
+            "pose_range": {"yaw": (-3.14, 3.14)},
+            "velocity_range": velocity_range,
+        }
+        # the tile is re-rolled on every reset, so the walked-distance promotion is meaningless here
+        self.curriculum.terrain_levels = None
+
+        self.disable_zero_weight_rewards()
