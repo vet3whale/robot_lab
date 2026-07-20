@@ -90,6 +90,47 @@ def _depth_camera_cfg(base_link_path: str, pos, rpy) -> RayCasterCameraCfg:
     )
 
 
+def make_depth_group(cfg, sensor_name: str):
+    """Create one channel-first depth observation group for ``sensor_name``."""
+    group = copy.deepcopy(cfg.observations.policy)
+    for name in list(group.__dict__.keys()):
+        if isinstance(getattr(group, name), ObsTerm):
+            setattr(group, name, None)
+    group.enable_corruption = False
+    group.depth = ObsTerm(
+        func=mdp.DepthImageDR,
+        params={
+            "sensor_cfg": SceneEntityCfg(sensor_name),
+            "min_range": DEPTH_MIN_RANGE,
+            "max_range": DEPTH_MAX_RANGE,
+            "enable_edge": True,
+            "enable_holes": True,
+            "enable_blind": True,
+            "enable_blur": True,
+        },
+    )
+    return group
+
+
+def add_depth_perception(cfg) -> None:
+    """Add the depth sensors and deployable observation groups used by the student."""
+    base_link_path = "{ENV_REGEX_NS}/Robot/" + cfg.base_link_name
+    cfg.scene.depth_cam_front = _depth_camera_cfg(base_link_path, DEPTH_CAM_FRONT_POS, DEPTH_CAM_FRONT_RPY)
+    cfg.scene.depth_cam_rear = _depth_camera_cfg(base_link_path, DEPTH_CAM_REAR_POS, DEPTH_CAM_REAR_RPY)
+    student = copy.deepcopy(cfg.observations.policy)
+    student.height_scan = None
+    student.velocity_commands = None
+    cfg.observations.student = student
+    student_commands = copy.deepcopy(cfg.observations.policy)
+    for name in list(student_commands.__dict__.keys()):
+        term = getattr(student_commands, name)
+        if isinstance(term, ObsTerm) and name != "velocity_commands":
+            setattr(student_commands, name, None)
+    cfg.observations.student_commands = student_commands
+    cfg.observations.depth_front = make_depth_group(cfg, "depth_cam_front")
+    cfg.observations.depth_rear = make_depth_group(cfg, "depth_cam_rear")
+
+
 def resolve_checkpoint(path: str) -> str:
     """Accept a .pt file, a run dir, or an experiment dir; return the newest model_*.pt.
 
@@ -193,7 +234,7 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         self.scene.terrain.max_init_terrain_level = 0
         self.sim.physx.gpu_collision_stack_size = 2**27  # stair meshes -> many contacts
 
-        self._add_depth_perception()
+        add_depth_perception(self)
 
         if self.__class__.__name__ == "UnitreeB2WMultiExpertTeacherEnvCfg":
             self.disable_zero_weight_rewards()
@@ -207,53 +248,12 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         commands are split into their own 1D group so they can bypass the LSTM and re-enter at the
         head (Rudin et al. Fig. 3).
         """
-        base_link_path = "{ENV_REGEX_NS}/Robot/" + self.base_link_name
-
-        # 1) two ray-cast depth cameras at the URDF mounts
-        self.scene.depth_cam_front = _depth_camera_cfg(base_link_path, DEPTH_CAM_FRONT_POS, DEPTH_CAM_FRONT_RPY)
-        self.scene.depth_cam_rear = _depth_camera_cfg(base_link_path, DEPTH_CAM_REAR_POS, DEPTH_CAM_REAR_RPY)
-
-        # 2) proprio `student` group: deep-copy of `policy` minus the privileged height scan and the
-        #    commands (commands move to their own group so they can bypass the LSTM)
-        student = copy.deepcopy(self.observations.policy)
-        student.height_scan = None
-        student.velocity_commands = None
-        self.observations.student = student
-
-        # 3) `student_commands` group: the velocity command split out on its own (1D)
-        student_commands = copy.deepcopy(self.observations.policy)
-        for name in list(student_commands.__dict__.keys()):
-            term = getattr(student_commands, name)
-            if isinstance(term, ObsTerm) and name != "velocity_commands":
-                setattr(student_commands, name, None)
-        self.observations.student_commands = student_commands
-
-        # 4) one image group per camera; a single term keeps the default concatenate_terms=True an
-        #    identity so the group stays 4D (B, 1, H, W) for the CNN
-        self.observations.depth_front = self._make_depth_group("depth_cam_front")
-        self.observations.depth_rear = self._make_depth_group("depth_cam_rear")
+        add_depth_perception(self)
 
     def _make_depth_group(self, sensor_name: str):
         """One image observation group holding a single channel-first depth term for ``sensor_name``."""
-        group = copy.deepcopy(self.observations.policy)
-        for name in list(group.__dict__.keys()):
-            if isinstance(getattr(group, name), ObsTerm):
-                setattr(group, name, None)
-        group.enable_corruption = False  # DR lives inside the term (stateful), not Isaac's noise layer
-        group.depth = ObsTerm(
-            func=mdp.DepthImageDR,
-            params={
-                "sensor_cfg": SceneEntityCfg(sensor_name),
-                "min_range": DEPTH_MIN_RANGE,
-                "max_range": DEPTH_MAX_RANGE,
-                # per-corruption switches (the clean-vs-randomized ablation); flip to False to disable
-                "enable_edge": True,
-                "enable_holes": True,
-                "enable_blind": True,
-                "enable_blur": True,
-            },
-        )
-        return group
+        return make_depth_group(self, sensor_name)
+
 
 @configclass
 class UnitreeB2WMultiExpertPlayRoughEnvCfg(UnitreeB2WMultiExpertTeacherEnvCfg):

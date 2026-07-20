@@ -1,9 +1,18 @@
 # Copyright (c) 2024-2026 Ziqi Fan
 # SPDX-License-Identifier: Apache-2.0
 
+import copy
+
 from isaaclab.utils import configclass
 
-from isaaclab_rl.rsl_rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
+from isaaclab_rl.rsl_rl import (
+    RslRlMLPModelCfg,
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoActorCriticCfg,
+    RslRlPpoAlgorithmCfg,
+)
+
+from .rsl_rl_multiexpert_distillation_cfg import UnitreeB2WMultiExpertDistillationRunnerCfg
 
 
 @configclass
@@ -54,29 +63,35 @@ class UnitreeB2WRoughV1PPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
 
 
 @configclass
-class UnitreeB2WRoughV2PPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
-    # PPO hyperparameters follow the ANYmal Parkour paper (Hoeller et al. 2024).
-    # The paper does not publish a hyperparameter table; it uses the standard
-    # rsl_rl / legged_gym on-policy PPO setup, which the base
-    # UnitreeB2WRoughPPORunnerCfg already matches exactly:
-    #   4096 parallel envs, 24 steps/env, 5 epochs, 4 minibatches,
-    #   gamma=0.99, lambda=0.95, clip=0.2, entropy=0.01, adaptive lr (kl=0.01),
-    #   actor/critic MLP [512, 256, 128] with elu.
-    # So v2 inherits those verbatim and only renames the experiment.
-    def __post_init__(self):
-        super().__post_init__()
+class UnitreeB2WStudentFinetunePPORunnerCfg(RslRlOnPolicyRunnerCfg):
+    num_steps_per_env = 24
+    max_iterations = 10000
+    save_interval = 100
+    experiment_name = "unitree_b2w_student_finetune"
 
-        self.experiment_name = "unitree_b2w_rough_v2"
+    obs_groups = {
+        "actor": ["student", "student_commands", "depth_front", "depth_rear"],
+        "critic": ["policy"],  # privileged: proprio + height scan, same as the expert critic
+    }
 
+    actor = copy.deepcopy(UnitreeB2WMultiExpertDistillationRunnerCfg().student)
+    critic = RslRlMLPModelCfg(hidden_dims=[512, 256, 128], activation="elu", obs_normalization=False)
 
-@configclass
-class UnitreeB2WRoughV3PPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
-    # Same PPO hyperparameters as v2 (the paper's standard rsl_rl setup); v3 only
-    # differs in the reward env (exact custom S2 functions vs v2's approximations).
-    def __post_init__(self):
-        super().__post_init__()
-
-        self.experiment_name = "unitree_b2w_rough_v3"
+    algorithm = RslRlPpoAlgorithmCfg(
+        # expert values, except where noted
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-4,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.005,
+        entropy_coef=0.01,
+        max_grad_norm=1.0,
+    )
 
 
 @configclass
@@ -93,4 +108,3 @@ class UnitreeB2WSlopeUpTeacherPPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
         super().__post_init__()
 
         self.experiment_name = "unitree_b2w_slopeup_teacher"
-

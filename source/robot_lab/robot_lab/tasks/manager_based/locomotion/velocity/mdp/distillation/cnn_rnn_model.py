@@ -102,10 +102,23 @@ class CNNRNNModel(CNNModel):
         self, obs: TensorDict, masks: torch.Tensor | None = None, hidden_state: HiddenState = None
     ) -> torch.Tensor:
         """Encode depth + proprio through the LSTM, then rejoin proprio and commands at the head."""
-        # Per-image CNN -> FC -> latent, concatenated over cameras.
-        z_img = torch.cat(
-            [self.cnn_fcs[group](self.cnns[group](obs[group])) for group in self.obs_groups_2d], dim=-1
-        )
+        # Per-image CNN -> FC -> latent, concatenated over cameras. In the recurrent PPO update the
+        # image obs arrive as [T, N, C, H, W]; conv2d needs 4D, so fold the leading (time, env) dims
+        # for the CNN and restore them on the latent. Single-step obs (rollout / distillation) are 4D
+        # and skip the reshape.
+        # Different loaders produce different input dimensions (4D vs 5D) -> both feed the one CNN
+        # function -> that function was written to accept only 4D -> PPO's 5D input crashes it.
+        img_latents = []
+        for group in self.obs_groups_2d:
+            image = obs[group]
+            if image.dim() == 5:
+                lead = image.shape[:2]
+                flat = image.reshape(-1, *image.shape[2:])
+                latent = self.cnn_fcs[group](self.cnns[group](flat)).reshape(*lead, -1)
+            else:
+                latent = self.cnn_fcs[group](self.cnns[group](image))
+            img_latents.append(latent)
+        z_img = torch.cat(img_latents, dim=-1)
         proprio = torch.cat([obs[group] for group in self.proprio_obs_groups], dim=-1)
         commands = torch.cat([obs[group] for group in self.command_obs_groups_active], dim=-1)
 

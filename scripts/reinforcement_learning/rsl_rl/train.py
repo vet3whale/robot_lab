@@ -31,6 +31,11 @@ parser.add_argument(
 parser.add_argument("--seed", type=int, default=None, help="Seed used for the environment")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument(
+    "--init_actor_from", type=str, default=None, help="Initialize actor from a PPO or distillation checkpoint."
+)
+parser.add_argument("--init_critic_from", type=str, default=None, help="Initialize critic from a PPO checkpoint.")
+parser.add_argument("--freeze_actor", action="store_true", default=False, help="Freeze actor for critic pre-training.")
+parser.add_argument(
     "--distributed", action="store_true", default=False, help="Run training with multiple GPUs or nodes."
 )
 parser.add_argument("--export_io_descriptors", action="store_true", default=False, help="Export IO descriptors.")
@@ -215,6 +220,22 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
         # load previously trained model
         runner.load(resume_path)
+
+    if args_cli.init_actor_from:
+        checkpoint = torch.load(args_cli.init_actor_from, map_location=agent_cfg.device, weights_only=False)
+        actor_state_dict = checkpoint.get("student_state_dict", checkpoint.get("actor_state_dict"))
+        if actor_state_dict is None:
+            raise KeyError("Checkpoint contains neither 'student_state_dict' nor 'actor_state_dict'.")
+        runner.alg._raw_actor.load_state_dict(actor_state_dict, strict=True)
+        print(f"[INFO]: Initialized actor from: {args_cli.init_actor_from}")
+    if args_cli.init_critic_from:
+        checkpoint = torch.load(args_cli.init_critic_from, map_location=agent_cfg.device, weights_only=False)
+        runner.alg._raw_critic.load_state_dict(checkpoint["critic_state_dict"], strict=True)
+        print(f"[INFO]: Initialized critic from: {args_cli.init_critic_from}")
+    if args_cli.freeze_actor:
+        for parameter in runner.alg._raw_actor.parameters():
+            parameter.requires_grad_(False)
+        print("[INFO]: Actor frozen; only the critic will be updated.")
 
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)
