@@ -235,7 +235,11 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if args_cli.freeze_actor:
         for parameter in runner.alg._raw_actor.parameters():
             parameter.requires_grad_(False)
-        print("[INFO]: Actor frozen; only the critic will be updated.")
+        # Actor and critic share one optimizer LR, and the adaptive schedule drives that LR from the
+        # actor's KL. With the actor frozen KL is ~0, so pin the schedule to keep the critic at its
+        # configured LR during pre-training. Phase B (actor unfrozen) keeps the adaptive schedule.
+        runner.alg.schedule = "fixed"
+        print("[INFO]: Actor frozen; only the critic will be updated. LR schedule pinned to 'fixed'.")
 
     # dump the configuration into log-directory
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

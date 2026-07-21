@@ -23,7 +23,7 @@ from isaaclab.managers import ObservationTermCfg as ObsTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import RayCasterCameraCfg
 from isaaclab.sensors.ray_caster.patterns import PinholeCameraPatternCfg
-from isaaclab.terrains import FlatPatchSamplingCfg, TerrainGeneratorCfg
+from isaaclab.terrains import TerrainGeneratorCfg
 from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 from isaaclab.utils import configclass
 from isaaclab.utils.math import quat_from_euler_xyz
@@ -229,6 +229,10 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         self.scene.terrain.terrain_generator = gen
         self.column_to_expert = column_to_expert
 
+        # Eval the student on the stock Rough-v0 terrain instead of the merged expert terrain.
+        # Uncomment to play/eval (mirrors the student finetune toggle).
+        # self.scene.terrain.terrain_generator = copy.deepcopy(ROUGH_TERRAINS_CFG)
+
         if getattr(self.curriculum, "terrain_levels", None) is not None:
             self.scene.terrain.terrain_generator.curriculum = True
         self.scene.terrain.max_init_terrain_level = 0
@@ -253,39 +257,3 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
     def _make_depth_group(self, sensor_name: str):
         """One image observation group holding a single channel-first depth term for ``sensor_name``."""
         return make_depth_group(self, sensor_name)
-
-
-@configclass
-class UnitreeB2WMultiExpertPlayRoughEnvCfg(UnitreeB2WMultiExpertTeacherEnvCfg):
-    """Play variant: evaluate the distilled student on the stock v0 rough terrain.
-
-    The merged teacher terrain is swapped back for ``ROUGH_TERRAINS_CFG`` (the terrain of
-    ``RobotLab-Isaac-Velocity-Rough-Unitree-B2W-v0``). Expert routing only selects which teacher's
-    action is stored as the distillation target, so it never drives the robot at play time; every
-    column maps to expert 0 to keep the ``MultiTeacherDistillation`` constructor happy.
-    """
-
-    def __post_init__(self):
-        super().__post_init__()
-
-        gen = copy.deepcopy(ROUGH_TERRAINS_CFG)
-        gen.curriculum = True
-        self.scene.terrain.terrain_generator = gen
-        self.column_to_expert = [0] * gen.num_cols
-
-        # sample spawn patches anywhere on each sub-terrain instead of always resetting at the
-        # patch origin (the pyramid center); rough / stepped spots are allowed via max_height_diff
-        for sub_cfg in gen.sub_terrains.values():
-            sub_cfg.flat_patch_sampling = {
-                "init_pos": FlatPatchSamplingCfg(num_patches=16, patch_radius=[0.4, 0.6], max_height_diff=0.3)
-            }
-        velocity_range = self.events.randomize_reset_base.params["velocity_range"]
-        # self.events.randomize_reset_base.func = reset_root_state_random_tile
-        self.events.randomize_reset_base.params = {
-            "pose_range": {"yaw": (-3.14, 3.14)},
-            "velocity_range": velocity_range,
-        }
-        # the tile is re-rolled on every reset, so the walked-distance promotion is meaningless here
-        self.curriculum.terrain_levels = None
-
-        self.disable_zero_weight_rewards()

@@ -1,5 +1,8 @@
+import copy
+
 import isaaclab.terrains as terrain_gen
 from isaaclab.terrains import TerrainGeneratorCfg
+from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 from isaaclab.utils import configclass
 
 from .multiexpert_teacher_env_cfg import add_depth_perception
@@ -53,6 +56,8 @@ class UnitreeB2WStudentFinetuneEnvCfg(UnitreeB2WRoughEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         self.scene.terrain.terrain_generator = ROUGH_TERRAINS_FT_CFG
+        # Eval the student on the stock Rough-v0 terrain instead of the FT obstacle terrain.
+        # self.scene.terrain.terrain_generator = copy.deepcopy(ROUGH_TERRAINS_CFG)
         if getattr(self.curriculum, "terrain_levels", None) is not None:
             self.scene.terrain.terrain_generator.curriculum = True
         self.sim.physx.gpu_collision_stack_size = 2**27

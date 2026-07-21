@@ -92,18 +92,6 @@ gym.register(
 )
 
 gym.register(
-    id="RobotLab-Isaac-Velocity-MultiExpert-Play-Rough-Unitree-B2W-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.multiexpert_teacher_env_cfg:UnitreeB2WMultiExpertPlayRoughEnvCfg",
-        "rsl_rl_distillation_recurrent_cfg_entry_point": (
-            f"{agents.__name__}.rsl_rl_multiexpert_distillation_cfg:UnitreeB2WMultiExpertDistillationRunnerCfg"
-        ),
-    },
-)
-
-gym.register(
     id="RobotLab-Isaac-Velocity-Student-Finetune-Unitree-B2W-v0",
     entry_point="isaaclab.envs:ManagerBasedRLEnv",
     disable_env_checker=True,
