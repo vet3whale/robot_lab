@@ -1,7 +1,6 @@
 # Copyright (c) 2024-2026 Ziqi Fan
 # SPDX-License-Identifier: Apache-2.0
 
-from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import RewardTermCfg as RewTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
@@ -134,18 +133,6 @@ class UnitreeB2WRoughEnvCfg(LocomotionVelocityRoughEnvCfg):
         self.events.randomize_apply_external_force_torque.params["asset_cfg"].body_names = [self.base_link_name]
         self.events.randomize_apply_external_force_torque.params["force_range"] = (-30.0, 30.0)
         self.events.randomize_apply_external_force_torque.params["torque_range"] = (-10.0, 10.0)
-        # record env 0's raw policy observations to HDF5 during every 10th learning iteration
-        self.events.record_policy_obs = EventTerm(
-            func=mdp.record_policy_obs,
-            mode="interval",
-            interval_range_s=(0.0, 0.0),  # fires every policy step
-            params={
-                "env_idx": 0,
-                "every_n_iterations": 10,
-                "steps_per_iteration": 24,  # must match agent cfg num_steps_per_env
-                "out_dir": None,  # <run log dir>/obs_records
-            },
-        )
 
         # ------------------------------Rewards------------------------------
         # General

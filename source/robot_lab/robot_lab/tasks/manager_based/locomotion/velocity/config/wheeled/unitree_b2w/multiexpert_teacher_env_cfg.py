@@ -24,7 +24,6 @@ from isaaclab.managers import SceneEntityCfg
 from isaaclab.sensors import RayCasterCameraCfg
 from isaaclab.sensors.ray_caster.patterns import PinholeCameraPatternCfg
 from isaaclab.terrains import TerrainGeneratorCfg
-from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
 from isaaclab.utils import configclass
 from isaaclab.utils.math import quat_from_euler_xyz
 from isaaclab_tasks.utils.parse_cfg import load_cfg_from_registry
@@ -229,8 +228,8 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
         self.scene.terrain.terrain_generator = gen
         self.column_to_expert = column_to_expert
 
-        # Eval the student on the stock Rough-v0 terrain instead of the merged expert terrain.
-        # Uncomment to play/eval (mirrors the student finetune toggle).
+        # Eval the student on the stock Rough-v0 terrain instead of the merged expert terrain        
+        # from isaaclab.terrains.config.rough import ROUGH_TERRAINS_CFG
         # self.scene.terrain.terrain_generator = copy.deepcopy(ROUGH_TERRAINS_CFG)
 
         if getattr(self.curriculum, "terrain_levels", None) is not None:
@@ -242,18 +241,3 @@ class UnitreeB2WMultiExpertTeacherEnvCfg(UnitreeB2WRoughEnvCfg):
 
         if self.__class__.__name__ == "UnitreeB2WMultiExpertTeacherEnvCfg":
             self.disable_zero_weight_rewards()
-
-    def _add_depth_perception(self):
-        """Add the 2 student depth cameras and the student's own (depth) observation groups.
-
-        The teacher keeps reading the privileged ``policy`` group (proprio + height_scan); only the
-        student gains a deployable view: proprio (no height scan) + 2 depth maps. Each camera becomes
-        its own 4D image group so rsl_rl's ``CNNModel`` routes it to a conv encoder, and the velocity
-        commands are split into their own 1D group so they can bypass the LSTM and re-enter at the
-        head (Rudin et al. Fig. 3).
-        """
-        add_depth_perception(self)
-
-    def _make_depth_group(self, sensor_name: str):
-        """One image observation group holding a single channel-first depth term for ``sensor_name``."""
-        return make_depth_group(self, sensor_name)

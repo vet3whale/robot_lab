@@ -47,37 +47,6 @@ gym.register(
     },
 )
 
-gym.register(
-    id="RobotLab-Isaac-Velocity-StaircaseUp-Teacher-Unitree-B2W-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.staircaseup_teacher_env_cfg:UnitreeB2WStaircaseUpTeacherEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeB2WStaircaseUpTeacherPPORunnerCfg",
-        "rsl_rl_distillation_cfg_entry_point": (
-            f"{agents.__name__}.rsl_rl_distillation_cfg:UnitreeB2WRoughDistillationRunnerCfg"
-        ),
-        "rsl_rl_distillation_recurrent_cfg_entry_point": (
-            f"{agents.__name__}.rsl_rl_distillation_cfg:UnitreeB2WRoughDistillationRunnerRecurrentCfg"
-        ),
-    },
-)
-
-gym.register(
-    id="RobotLab-Isaac-Velocity-SlopeUp-Teacher-Unitree-B2W-v0",
-    entry_point="isaaclab.envs:ManagerBasedRLEnv",
-    disable_env_checker=True,
-    kwargs={
-        "env_cfg_entry_point": f"{__name__}.slopeup_teacher_env_cfg:UnitreeB2WSlopeUpTeacherEnvCfg",
-        "rsl_rl_cfg_entry_point": f"{agents.__name__}.rsl_rl_ppo_cfg:UnitreeB2WSlopeUpTeacherPPORunnerCfg",
-        "rsl_rl_distillation_cfg_entry_point": (
-            f"{agents.__name__}.rsl_rl_distillation_cfg:UnitreeB2WRoughDistillationRunnerCfg"
-        ),
-        "rsl_rl_distillation_recurrent_cfg_entry_point": (
-            f"{agents.__name__}.rsl_rl_distillation_cfg:UnitreeB2WRoughDistillationRunnerRecurrentCfg"
-        ),
-    },
-)
 
 gym.register(
     id="RobotLab-Isaac-Velocity-MultiExpert-Teacher-Unitree-B2W-v0",

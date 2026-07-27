@@ -92,19 +92,3 @@ class UnitreeB2WStudentFinetunePPORunnerCfg(RslRlOnPolicyRunnerCfg):
         entropy_coef=0.01,
         max_grad_norm=1.0,
     )
-
-
-@configclass
-class UnitreeB2WStaircaseUpTeacherPPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
-    def __post_init__(self):
-        super().__post_init__()
-
-        self.experiment_name = "unitree_b2w_staircaseup_teacher"
-
-
-@configclass
-class UnitreeB2WSlopeUpTeacherPPORunnerCfg(UnitreeB2WRoughPPORunnerCfg):
-    def __post_init__(self):
-        super().__post_init__()
-
-        self.experiment_name = "unitree_b2w_slopeup_teacher"
