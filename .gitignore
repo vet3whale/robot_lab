@@ -29,8 +29,7 @@
 docker/artifacts/
 *.tmp
 *.npz
-evaluation.csv
-evaluation_summary.csv
+evaluation_table.csv
 
 # Isaac-Sim packman
 _isaac_sim*
